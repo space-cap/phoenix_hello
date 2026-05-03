@@ -1,0 +1,148 @@
+# The directory Mix will write compiled artifacts to.
+/_build/
+
+# If you run "mix test --cover", coverage assets end up here.
+/cover/
+
+# The directory Mix downloads your dependencies sources to.
+/deps/
+
+# Where 3rd-party dependencies like ExDoc output generated docs.
+/doc/
+
+# Ignore .fetch files in case you like to edit your project deps locally.
+/.fetch
+
+# If the VM crashes, it generates a dump, let's ignore it too.
+erl_crash.dump
+
+# Also ignore archive artifacts (built via "mix archive.build").
+*.ez
+
+# Temporary files, for example, from tests.
+/tmp/
+
+# Ignore package tarball (built via "mix hex.build").
+phoenix_hello-*.tar
+
+# Ignore assets that are produced by build tools.
+/priv/static/assets/
+
+# Ignore digested assets cache.
+/priv/static/cache_manifest.json
+
+# In case you use Node.js/npm, you want to ignore these.
+npm-debug.log
+/assets/node_modules/
+
+# ==============================================================================
+# 환경 변수 & 비밀 설정
+# ==============================================================================
+
+# 로컬 환경 설정 (비밀 키, DB 비밀번호 등)
+.env
+.env.local
+.env.*.local
+
+# Phoenix secret config (프로덕션 및 로컬 시크릿)
+config/*.secret.exs
+config/releases.exs
+
+# ==============================================================================
+# Elixir / Mix 관련
+# ==============================================================================
+
+# Dialyzer PLT 파일 (정적 분석 캐시)
+/priv/plts/
+*.plt
+*.plt.hash
+
+# Mix lock 파일 외 기타 lock 파일
+/.mix/
+
+# Hex 패키지 캐시
+.hex/
+
+# ==============================================================================
+# Phoenix LiveReloader / 개발 도구
+# ==============================================================================
+
+# Phoenix LiveReloader 관련
+/priv/static/assets/
+
+# Swoosh 이메일 미리보기 (개발 환경)
+/priv/static/
+
+# ==============================================================================
+# IDE / 에디터 설정
+# ==============================================================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# IntelliJ / JetBrains
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+\#*\#
+.\#*
+*.elc
+
+# Cursor IDE
+.cursor/
+
+# ==============================================================================
+# OS 생성 파일
+# ==============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+
+# ==============================================================================
+# 테스트 & 커버리지
+# ==============================================================================
+
+# ExUnit 커버리지 리포트 (HTML)
+/cover/
+
+# ==============================================================================
+# 릴리즈 & 배포
+# ==============================================================================
+
+# Mix Release 빌드 결과물
+/burrito_out/
+/_build/rel/
+
+# Docker 관련
+.dockerignore.bak
+
+# ==============================================================================
+# 로그 & 임시 파일
+# ==============================================================================
+
+*.log
+/log/
