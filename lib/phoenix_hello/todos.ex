@@ -21,9 +21,9 @@ defmodule PhoenixHello.Todos do
     Repo.all(Todo)
   end
 
-  def list_todos_for_user(user_id) do
+  def list_todos(current_scope) do
     Todo
-    |> where([t], t.user_id == ^user_id)
+    |> where([t], t.user_id == ^current_scope.user.id)
     |> Repo.all()
   end
 

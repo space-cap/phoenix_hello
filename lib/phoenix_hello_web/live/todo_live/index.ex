@@ -3,10 +3,14 @@ defmodule PhoenixHelloWeb.TodoLive.Index do
 
   alias PhoenixHello.Todos
 
+  # 1. 여기에 추가합니다!
+  # 이 코드가 있어야 mount 실행 전에 socket.assigns.current_user가 채워집니다.
+  on_mount {PhoenixHelloWeb.UserAuth, :ensure_authenticated}
+
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.header>
         Listing Todos
         <:actions>
@@ -44,9 +48,7 @@ defmodule PhoenixHelloWeb.TodoLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
-    # 로그인한 유저의 ID로 TODO 목록 가져오기
-    user_id = socket.assigns.current_user.id
-    {:ok, stream(socket, :todos, PhoenixHello.Todos.list_todos_for_user(user_id))}
+    {:ok, stream(socket, :todos, PhoenixHello.Todos.list_todos(socket.assigns.current_scope))}
   end
 
   @impl true
