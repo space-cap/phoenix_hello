@@ -197,118 +197,106 @@ end
 
 ---
 
-## 3단계: LiveView 심화 🔥
+## 3단계: LiveView 심화 🔥 (컴포넌트와 JS Hook 실습)
 
-### LiveComponent — 재사용 가능한 UI 조각
+기본적인 TODO 기능은 완성했지만, 코드를 더 깔끔하게 관리하고 고급 기능을 넣기 위해 **LiveComponent**와 **JS Hook**을 사용해 보겠습니다.
 
-컴포넌트는 "복잡한 UI를 독립적인 조각으로 나누는" 도구예요.
+### 실습 순서 1: LiveComponent로 UI 조각내기
+컴포넌트는 "복잡한 UI를 독립적인 조각으로 나누는" 강력한 도구입니다.
+
+**1. `todo_item_component.ex` 파일 생성하기**
+`lib/phoenix_hello_web/live/todo_live/` 폴더에 파일을 새로 만들고 아래 코드를 넣으세요.
 
 ```elixir
-# lib/phoenix_hello_web/live/components/todo_item.ex
-defmodule PhoenixHelloWeb.TodoItem do
+defmodule PhoenixHelloWeb.TodoLive.TodoItemComponent do
   use PhoenixHelloWeb, :live_component
+  alias PhoenixHello.Todos
 
   def render(assigns) do
     ~H"""
-    <div class="flex items-center gap-2 p-3 border rounded">
+    <div id={@id} class="flex items-center gap-4 p-3 border-b hover:bg-gray-50 transition">
       <input type="checkbox" checked={@todo.done}
-             phx-click="toggle" phx-value-id={@todo.id} phx-target={@myself} />
-      <span class={[@todo.done && "line-through text-gray-400"]}>
+             phx-click="toggle_done" phx-target={@myself} class="w-5 h-5 rounded" />
+      <span class={[@todo.done && "line-through text-gray-400", "flex-grow font-medium"]}>
         {@todo.title}
       </span>
+      <.link navigate={~p"/todos/#{@todo}/edit"} class="text-sm text-blue-500 hover:underline">
+        수정
+      </.link>
+      <.link phx-click="delete" phx-value-id={@todo.id} data-confirm="정말 삭제하시겠습니까?" class="text-sm text-red-500 hover:underline">
+        삭제
+      </.link>
     </div>
     """
   end
 
-  def handle_event("toggle", %{"id" => id}, socket) do
-    # 이 컴포넌트 안에서만 이벤트 처리!
-    {:noreply, socket}
+  def handle_event("toggle_done", _params, socket) do
+    # 이 컴포넌트 안에서만 이벤트 처리 (phx-target={@myself})
+    todo = socket.assigns.todo
+    {:ok, updated_todo} = Todos.update_todo(todo, %{done: !todo.done})
+
+    # 부모 LiveView에 변경 사항 알림
+    send(self(), {:todo_updated, updated_todo})
+    {:noreply, assign(socket, :todo, updated_todo)}
   end
 end
 ```
 
-```elixir
-# 부모 LiveView에서 컴포넌트 사용
-<.live_component module={PhoenixHelloWeb.TodoItem}
-                 id={"todo-#{todo.id}"}
-                 todo={todo} />
-```
-
-### LiveView 스트림 — 대용량 목록 처리
-
-초보 때 배운 `assign(messages: [...])`은 목록이 커질수록 메모리를 많이 써요.
-**스트림**은 이 문제를 해결해줘요.
+**2. `index.ex`에서 컴포넌트 사용하기**
+`lib/phoenix_hello_web/live/todo_live/index.ex` 파일의 `render` 함수 안에 있던 `<.table ...>` 전체를 아래 코드로 교체하세요. (스트림은 대용량 목록 렌더링에 최적화된 방식입니다)
 
 ```elixir
-def mount(_params, _session, socket) do
-  {:ok, stream(socket, :todos, Todos.list_todos())}
-  #      ↑ 일반 assign 대신 stream 사용!
-end
-
-# 템플릿에서
-<div id="todos" phx-update="stream">  # ← phx-update="stream" 필수!
-  <div :for={{id, todo} <- @streams.todos} id={id}>
-    {todo.title}
-  </div>
-</div>
+      <div id="todos" phx-update="stream" class="mt-8 bg-white shadow rounded-lg p-4">
+        <div :for={{id, todo} <- @streams.todos} id={id}>
+          <.live_component 
+            module={PhoenixHelloWeb.TodoLive.TodoItemComponent}
+            id={id}
+            todo={todo} 
+          />
+        </div>
+      </div>
 ```
 
-### 파일 업로드
+**3. `index.ex`에 업데이트 이벤트 받기**
+`index.ex` 맨 아래쪽에 다음 코드를 추가하여, 컴포넌트에서 넘어온 업데이트 신호를 스트림에 반영합니다.
 
 ```elixir
-def mount(_params, _session, socket) do
-  {:ok,
-   socket
-   |> allow_upload(:avatar, accept: ~w(.jpg .png), max_entries: 1)}
-end
-
-def render(assigns) do
-  ~H"""
-  <form phx-submit="save" phx-change="validate">
-    <.live_file_input upload={@uploads.avatar} />
-    <button type="submit">업로드</button>
-  </form>
-  """
-end
-
-def handle_event("save", _params, socket) do
-  uploaded_files =
-    consume_uploaded_entries(socket, :avatar, fn %{path: path}, _entry ->
-      dest = Path.join("priv/static/uploads", Path.basename(path))
-      File.cp!(path, dest)
-      {:ok, "/uploads/#{Path.basename(dest)}"}
-    end)
-
-  {:noreply, assign(socket, uploaded_files: uploaded_files)}
-end
+  @impl true
+  def handle_info({:todo_updated, updated_todo}, socket) do
+    {:noreply, stream_insert(socket, :todos, updated_todo)}
+  end
 ```
 
-### JS Hooks — JavaScript가 꼭 필요할 때
+### 실습 순서 2: Colocated JS Hook 사용하기 (Phoenix 1.8 최신 방식)
+LiveView로 해결이 안 되는 순수 자바스크립트 동작(예: 포커스, 차트, 애니메이션)이 필요할 때는 **JS Hook**을 씁니다.
 
-LiveView로 해결 안 되는 경우 (예: 지도, 차트, 특수 애니메이션):
-
-```javascript
-// assets/js/hooks/chart_hook.js
-const ChartHook = {
-  mounted() {
-    this.chart = new Chart(this.el, { type: "line", data: {} })
-
-    // 서버에서 새 데이터를 받으면 차트 업데이트
-    this.handleEvent("update_chart", (data) => {
-      this.chart.data = data
-      this.chart.update()
-    })
-  }
-}
-export default ChartHook
-```
+`index.ex` 템플릿의 `Listing Todos` 제목 옆에 다음 코드를 추가해 보세요. (템플릿 파일 안에 직접 스크립트를 작성하는 최신 방식입니다)
 
 ```elixir
-# LiveView에서 JS로 이벤트 전송
-def handle_info({:new_data, data}, socket) do
-  {:noreply, push_event(socket, "update_chart", %{labels: data.labels, values: data.values})}
-end
+      <.header>
+        <span id="title-anim" phx-hook=".ColorBlink">Listing Todos</span>
+        <:actions>
+          ...
+      </.header>
+
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".ColorBlink">
+        export default {
+          mounted() {
+            this.el.addEventListener("mouseenter", () => {
+              this.el.style.color = "blue";
+            });
+            this.el.addEventListener("mouseleave", () => {
+              this.el.style.color = "";
+            });
+          }
+        }
+      </script>
 ```
+
+### ✅ 확인 방법
+1. 브라우저에서 `/todos` 페이지 접속
+2. 체크박스를 클릭했을 때 페이지 깜빡임 없이 취소선이 생기는지 확인 (`LiveComponent` 테스트)
+3. "Listing Todos" 글자에 마우스를 올렸을 때 파란색으로 변하는지 확인 (`Colocated JS Hook` 테스트)
 
 ---
 
