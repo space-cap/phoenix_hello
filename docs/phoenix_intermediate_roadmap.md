@@ -247,13 +247,12 @@ end
 
 ```elixir
       <div id="todos" phx-update="stream" class="mt-8 bg-white shadow rounded-lg p-4">
-        <div :for={{id, todo} <- @streams.todos} id={id}>
-          <.live_component 
-            module={PhoenixHelloWeb.TodoLive.TodoItemComponent}
-            id={id}
-            todo={todo} 
-          />
-        </div>
+        <.live_component 
+          :for={{id, todo} <- @streams.todos}
+          module={PhoenixHelloWeb.TodoLive.TodoItemComponent}
+          id={id}
+          todo={todo} 
+        />
       </div>
 ```
 

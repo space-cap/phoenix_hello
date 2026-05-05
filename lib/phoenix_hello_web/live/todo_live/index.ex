@@ -3,13 +3,12 @@ defmodule PhoenixHelloWeb.TodoLive.Index do
 
   alias PhoenixHello.Todos
 
-
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <.header>
-        Listing Todos
+        <span id="title-anim" phx-hook=".ColorBlink">Listing Todos</span>
         <:actions>
           <.button variant="primary" navigate={~p"/todos/new"}>
             <.icon name="hero-plus" /> New Todo
@@ -17,28 +16,27 @@ defmodule PhoenixHelloWeb.TodoLive.Index do
         </:actions>
       </.header>
 
-      <.table
-        id="todos"
-        rows={@streams.todos}
-        row_click={fn {_id, todo} -> JS.navigate(~p"/todos/#{todo}") end}
-      >
-        <:col :let={{_id, todo}} label="Title">{todo.title}</:col>
-        <:col :let={{_id, todo}} label="Done">{todo.done}</:col>
-        <:action :let={{_id, todo}}>
-          <div class="sr-only">
-            <.link navigate={~p"/todos/#{todo}"}>Show</.link>
-          </div>
-          <.link navigate={~p"/todos/#{todo}/edit"}>Edit</.link>
-        </:action>
-        <:action :let={{id, todo}}>
-          <.link
-            phx-click={JS.push("delete", value: %{id: todo.id}) |> hide("##{id}")}
-            data-confirm="Are you sure?"
-          >
-            Delete
-          </.link>
-        </:action>
-      </.table>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".ColorBlink">
+        export default {
+          mounted() {
+            this.el.addEventListener("mouseenter", () => {
+              this.el.style.color = "blue";
+            });
+            this.el.addEventListener("mouseleave", () => {
+              this.el.style.color = "";
+            });
+          }
+        }
+      </script>
+
+      <div id="todos" phx-update="stream" class="mt-8 bg-white shadow rounded-lg p-4">
+        <.live_component
+          :for={{id, todo} <- @streams.todos}
+          module={PhoenixHelloWeb.TodoLive.TodoItemComponent}
+          id={id}
+          todo={todo}
+        />
+      </div>
     </Layouts.app>
     """
   end
@@ -56,5 +54,13 @@ defmodule PhoenixHelloWeb.TodoLive.Index do
     {:noreply, stream_delete(socket, :todos, todo)}
   end
 
+  @impl true
+  def handle_info({:todo_updated, updated_todo}, socket) do
+    {:noreply, stream_insert(socket, :todos, updated_todo)}
+  end
 
+  @impl true
+  def handle_info({:todo_deleted, id}, socket) do
+    {:noreply, stream_delete(socket, :todos, id)}
+  end
 end
