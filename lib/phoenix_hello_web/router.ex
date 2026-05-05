@@ -21,6 +21,7 @@ defmodule PhoenixHelloWeb.Router do
     get "/hello", HelloController, :index
     get "/about", PageController, :about
     get "/greet/:name", HelloController, :greet
+    live "/counter", CounterLive
   end
 
   # Other scopes may use custom stacks.

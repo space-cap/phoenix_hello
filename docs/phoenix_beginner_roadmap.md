@@ -142,19 +142,69 @@ JavaScript 없이 Elixir 코드만으로 실시간 인터랙티브 UI를 만들 
 클릭! → 서버에 이벤트 전송 → 서버에서 상태 변경 → 화면 자동 업데이트
 ```
 
+일반 컨트롤러 방식과 LiveView 방식의 차이:
+
+| | 일반 Controller | LiveView |
+|--|----------------|----------|
+| 동작 방식 | 요청할 때마다 HTML 새로 생성 | WebSocket으로 지속 연결, 변경된 부분만 전송 |
+| 실시간 | ❌ (새로고침 필요) | ✅ (자동 업데이트) |
+| JavaScript 필요 | 직접 써야 함 | 거의 불필요 |
+| 파일 위치 | `controllers/` | `live/` |
+
+---
+
+### ❓ Q1: 왜 `live/` 폴더에 만들어야 하나요? `run/` 폴더로 해도 되나요?
+
+**짧은 답: 꼭 `live/`일 필요는 없어요. 하지만 강력하게 권장해요.**
+
+Phoenix는 파일 위치를 강제하지 않아요. 기술적으로는 어느 폴더에 만들어도 동작해요.
+그런데 Phoenix 커뮤니티 전체가 LiveView 파일은 `live/` 폴더에 두는 것을 **관례(Convention)**로 정해뒀어요.
+
+```
+lib/phoenix_hello_web/
+├── controllers/    ← 일반 HTTP 요청 처리 (Controller)
+├── live/           ← LiveView 실시간 페이지  ← ✅ 여기!
+└── components/     ← 재사용 UI 컴포넌트
+```
+
+마치 한국에서 차는 우측통행이에요. 좌측으로 달려도 물리적으로는 가능하지만,
+모두가 규칙을 지켜야 혼란이 없겠죠? 이와 같은 이유예요.
+
+> 💡 **관례를 따르면**: 다른 개발자가 코드를 봤을 때 "아, `live/`에 있으니 LiveView겠구나!" 바로 알 수 있어요.
+
+---
+
+### ❓ Q2: 파일을 만들면 자동으로 `CounterLive`가 생성되나요?
+
+**아니요! 파일 이름과 모듈 이름은 별개예요. 단, 규칙을 따르면 헷갈리지 않아요.**
+
+```
+파일 이름:   counter_live.ex       ← snake_case (소문자 + 언더스코어)
+모듈 이름:   CounterLive           ← PascalCase (각 단어 첫 글자 대문자)
+```
+
+Phoenix가 자동으로 파일을 읽어서 모듈을 만들지는 않아요.
+`defmodule PhoenixHelloWeb.CounterLive do ... end` 코드를 **우리가 직접 파일 안에 작성**해야 해요.
+파일 이름과 모듈 이름을 맞추는 건 **Elixir의 강력한 관례**예요.
+
+> ⚠️ 파일 이름이 `counter_live.ex`인데 안에 `defmodule PhoenixHelloWeb.FooBar`라고 쓰면?
+> 오류는 안 나지만 다른 사람이 파일을 찾을 때 엄청 혼란스러워요. 항상 맞춰 쓰세요!
+
+---
+
 ### 실습: 버튼 클릭 카운터
 
 **`lib/phoenix_hello_web/live/counter_live.ex`** 새 파일 생성:
 
 ```elixir
-defmodule PhoenixHelloWeb.CounterLive do
-  use PhoenixHelloWeb, :live_view
+defmodule PhoenixHelloWeb.CounterLive do  # ← (1) 모듈 선언
+  use PhoenixHelloWeb, :live_view         # ← (2) LiveView 기능 불러오기
 
-  def mount(_params, _session, socket) do
+  def mount(_params, _session, socket) do # ← (3) 초기 설정
     {:ok, assign(socket, count: 0)}
   end
 
-  def render(assigns) do
+  def render(assigns) do                  # ← (4) 화면 그리기
     ~H"""
     <Layouts.app flash={@flash}>
       <div class="text-center py-20">
@@ -181,7 +231,7 @@ defmodule PhoenixHelloWeb.CounterLive do
     """
   end
 
-  def handle_event("increment", _params, socket) do
+  def handle_event("increment", _params, socket) do  # ← (5) 이벤트 처리
     {:noreply, update(socket, :count, &(&1 + 1))}
   end
 
@@ -195,15 +245,100 @@ defmodule PhoenixHelloWeb.CounterLive do
 end
 ```
 
+---
+
+### 📖 코드 한 줄 한 줄 설명
+
+#### (1) `defmodule PhoenixHelloWeb.CounterLive do`
+Elixir에서 코드 묶음(모듈)을 선언해요.
+`PhoenixHelloWeb.CounterLive`는 "PhoenixHelloWeb 앱 안의 CounterLive 모듈"이라는 뜻이에요.
+
+```
+PhoenixHelloWeb  ← 우리 앱의 웹 모듈 (네임스페이스)
+CounterLive      ← 이 파일의 고유 이름
+```
+
+#### (2) `use PhoenixHelloWeb, :live_view`
+"LiveView에 필요한 모든 기능을 여기서 사용할게요!"라고 선언하는 줄이에요.
+
+이 한 줄이 없으면 `mount`, `render`, `handle_event` 같은 LiveView 기능을 전혀 쓸 수 없어요.
+마치 공구함을 열지 않으면 드라이버를 꺼낼 수 없는 것처럼요.
+
+```
+use PhoenixHelloWeb, :live_view
+                    ↑
+        이 옵션이 "나는 LiveView야"라고 알려줘요.
+        :html 이면 일반 뷰, :live_view 이면 LiveView
+```
+
+#### (3) `def mount(_params, _session, socket) do`
+**"페이지가 처음 열릴 때 딱 한 번 실행"** 되는 함수예요. 초기화 역할이에요.
+
+```elixir
+def mount(_params, _session, socket) do
+#          ↑         ↑        ↑
+#       URL 파라미터  세션 정보  현재 연결 상태 (제일 중요!)
+#       (_로 시작 = 지금은 사용 안 함, 무시)
+
+  {:ok, assign(socket, count: 0)}
+#  ↑          ↑              ↑
+# "성공!"    socket에 데이터 추가  count를 0으로 초기화
+end
+```
+
+`socket`은 LiveView의 핵심이에요. 서버와 브라우저 사이의 "연결 상태 + 데이터 보관함"이에요.
+`assign(socket, count: 0)` → socket에 `count = 0` 데이터를 저장해요.
+
+#### (4) `def render(assigns)` + `{@count}`
+화면에 보여줄 HTML을 반환하는 함수예요.
+
+```elixir
+<p class="text-8xl">{@count}</p>
+#                    ↑
+#         socket에 저장된 count 값을 여기 출력!
+#         assign(socket, count: 0) 으로 저장한 바로 그 값
+```
+
+`@count`는 "socket에 저장된 count 값을 가져와서 보여줘"라는 뜻이에요.
+
+```
+assign(socket, count: 0)  → 저장
+{@count}                  → 꺼내서 화면에 표시
+```
+
+#### (5) `phx-click="increment"` + `handle_event`
+버튼의 `phx-click="increment"`는 "이 버튼을 클릭하면 서버의 `handle_event("increment", ...)`를 호출해!"라는 뜻이에요.
+
+```
+버튼 클릭
+    ↓
+phx-click="increment"  →  WebSocket으로 "increment" 이벤트 전송
+    ↓
+handle_event("increment", _params, socket)  ←  서버에서 수신
+    ↓
+update(socket, :count, &(&1 + 1))  →  count 값을 1 증가
+    ↓
+변경된 부분만 브라우저로 전송 → 화면 자동 업데이트!
+```
+
+`update(socket, :count, &(&1 + 1))`는 조금 어려워 보이는데,
+"socket 안의 count 값을 현재 값(`&1`) + 1 로 바꿔줘"라는 뜻이에요.
+
 **router.ex** 에 추가:
 ```elixir
 live "/counter", CounterLive
+# ↑               ↑
+# live 라우트 선언  연결할 LiveView 모듈
+# (get 대신 live 를 써요!)
 ```
 
 ### ✅ 확인 방법
 `http://localhost:4000/counter` 접속 → 버튼 클릭해보기
 
 > 💡 페이지 새로고침 없이 숫자가 바뀌는 게 LiveView의 마법이에요!
+> 개발자 도구(F12)의 Network 탭을 보면 HTTP 요청이 아닌 **WebSocket** 통신을 볼 수 있어요.
+
+
 
 ---
 
