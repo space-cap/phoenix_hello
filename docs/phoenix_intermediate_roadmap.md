@@ -124,7 +124,7 @@ defmodule PhoenixHello.Todos.Todo do
 
   def changeset(todo, attrs) do
     todo
-    |> cast(attrs, [:title, :done, :user_id]) # :user_id 추가!
+    |> cast(attrs, [:title, :done]) # 보안 규칙: 프로그램에서 세팅하는 user_id는 cast에 넣지 않습니다!
     |> validate_required([:title, :done])
   end
 end
@@ -154,27 +154,41 @@ end
   import Ecto.Query
 
   # 기존 list_todos/0 아래에 새 함수 추가
-  def list_todos_for_user(user_id) do
+  def list_todos(current_scope) do
     Todo
-    |> where([t], t.user_id == ^user_id)
+    |> where([t], t.user_id == ^current_scope.user.id)
     |> Repo.all()
+  end
+```
+
+그리고 새 TODO를 생성할 때 누구의 것인지(`user_id`) 확실하게 지정해 줘야 합니다.
+**`lib/phoenix_hello/todos.ex`의 `create_todo` 수정:**
+```elixir
+  # current_scope를 받아 명시적으로 user_id를 주입
+  def create_todo(current_scope, attrs) do
+    %Todo{user_id: current_scope.user.id}
+    |> Todo.changeset(attrs)
+    |> Repo.insert()
   end
 ```
 
 #### (4) LiveView에서 현재 로그인한 유저 연결하기
 
-`lib/phoenix_hello_web/live/todo_live/index.ex`를 열고, 기존 `Todos.list_todos()`를 방금 만든 함수로 교체합니다. 로그인 정보는 `@current_user`에 들어있습니다.
+`lib/phoenix_hello_web/live/todo_live/index.ex`를 열고, 기존 `Todos.list_todos()`를 다음과 같이 교체합니다.
 
 ```elixir
   @impl true
   def mount(_params, _session, socket) do
-    # 로그인한 유저의 ID로 TODO 목록 가져오기
-    user_id = socket.assigns.current_user.id
-    {:ok, stream(socket, :todos, PhoenixHello.Todos.list_todos_for_user(user_id))}
+    {:ok, stream(socket, :todos, PhoenixHello.Todos.list_todos(socket.assigns.current_scope))}
   end
 ```
 
-그리고 새 TODO를 생성할 때 누구의 것인지(`user_id`) 넣어줘야 합니다. `form.ex`나 해당 로직을 처리하는 곳에서 `attrs`에 `user_id: user.id`를 추가하면 됩니다.
+그리고 `lib/phoenix_hello_web/live/todo_live/form.ex`의 `save_todo` 함수에서도 새 TODO를 만들 때 `current_scope`를 넘기도록 수정합니다.
+
+```elixir
+  defp save_todo(socket, :new, todo_params) do
+    case Todos.create_todo(socket.assigns.current_scope, todo_params) do
+```
 
 ### ✅ 확인 방법
 1. 브라우저에서 `/users/register`로 가입 후 로그인
