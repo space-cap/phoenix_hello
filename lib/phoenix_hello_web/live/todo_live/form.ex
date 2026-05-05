@@ -78,7 +78,7 @@ defmodule PhoenixHelloWeb.TodoLive.Form do
   end
 
   defp save_todo(socket, :new, todo_params) do
-    case Todos.create_todo(todo_params) do
+    case Todos.create_todo(socket.assigns.current_scope, todo_params) do
       {:ok, todo} ->
         {:noreply,
          socket

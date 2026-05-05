@@ -55,8 +55,8 @@ defmodule PhoenixHello.Todos do
       {:error, %Ecto.Changeset{}}
 
   """
-  def create_todo(attrs) do
-    %Todo{}
+  def create_todo(current_scope, attrs) do
+    %Todo{user_id: current_scope.user.id}
     |> Todo.changeset(attrs)
     |> Repo.insert()
   end

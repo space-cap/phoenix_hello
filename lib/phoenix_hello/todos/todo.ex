@@ -10,10 +10,9 @@ defmodule PhoenixHello.Todos.Todo do
     timestamps(type: :utc_datetime)
   end
 
-  @doc false
   def changeset(todo, attrs) do
     todo
-    |> cast(attrs, [:title, :done, :user_id])
+    |> cast(attrs, [:title, :done])
     |> validate_required([:title, :done])
   end
 end
