@@ -338,11 +338,152 @@ live "/counter", CounterLive
 > 💡 페이지 새로고침 없이 숫자가 바뀌는 게 LiveView의 마법이에요!
 > 개발자 도구(F12)의 Network 탭을 보면 HTTP 요청이 아닌 **WebSocket** 통신을 볼 수 있어요.
 
+---
 
+### 🌐 심화: 다른 브라우저에서도 실시간 반영하기 (PubSub)
+
+#### 현재 상태의 문제
+
+지금 카운터는 **각 브라우저(탭)마다 독립된 상태**를 가져요.
+크롬에서 +1을 눌러도 엣지 브라우저에서는 숫자가 안 바뀌죠.
+
+```
+크롬 탭    → 자기만의 count = 5
+엣지 탭    → 자기만의 count = 0  (따로 놀아요!)
+```
+
+#### Phoenix PubSub이란?
+
+**PubSub** = **Pub**lish(발행) + **Sub**scribe(구독)
+
+라디오 방송국처럼 생각하면 쉬워요:
+- **방송국(Publish)**: "숫자가 바뀌었어요!" 라고 전파를 쏨
+- **청취자(Subscribe)**: 연결된 모든 브라우저가 방송을 듣고 화면 업데이트
+
+```
+크롬에서 버튼 클릭
+       ↓
+서버에서 count 변경
+       ↓
+PubSub으로 "count_updated" 이벤트 전파 (방송!)
+       ↓
+┌──────────┐  ┌──────────┐  ┌──────────┐
+│  크롬 탭  │  │  엣지 탭  │  │  파폭 탭  │
+│  count:5 │  │  count:5 │  │  count:5 │  ← 모두 동시 업데이트!
+└──────────┘  └──────────┘  └──────────┘
+```
+
+#### 코드 수정 방법
+
+**`lib/phoenix_hello_web/live/counter_live.ex`** 를 다음과 같이 수정하세요:
+
+```elixir
+defmodule PhoenixHelloWeb.CounterLive do
+  use PhoenixHelloWeb, :live_view
+
+  # PubSub 토픽 이름 (방송 채널 이름 같은 것)
+  @topic "counter:global"
+
+  def mount(_params, _session, socket) do
+    # 이 LiveView가 시작될 때 "counter:global" 채널을 구독(청취 시작)
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(PhoenixHello.PubSub, @topic)
+    end
+
+    {:ok, assign(socket, count: 0)}
+  end
+
+  def render(assigns) do
+    ~H"""
+    <Layouts.app flash={@flash}>
+      <div class="text-center py-20">
+        <h1 class="text-4xl font-bold mb-8">실시간 카운터 (전체 공유)</h1>
+
+        <p class="text-8xl font-mono mb-10">{@count}</p>
+
+        <div class="flex gap-4 justify-center">
+          <button phx-click="decrement"
+                  class="px-6 py-3 bg-red-500 text-white rounded-lg text-xl hover:bg-red-600">
+            ➖ 감소
+          </button>
+          <button phx-click="reset"
+                  class="px-6 py-3 bg-gray-500 text-white rounded-lg text-xl hover:bg-gray-600">
+            🔄 초기화
+          </button>
+          <button phx-click="increment"
+                  class="px-6 py-3 bg-blue-500 text-white rounded-lg text-xl hover:bg-blue-600">
+            ➕ 증가
+          </button>
+        </div>
+      </div>
+    </Layouts.app>
+    """
+  end
+
+  # 버튼 클릭 시 → 새 count 계산 → 전체 채널에 방송!
+  def handle_event("increment", _params, socket) do
+    new_count = socket.assigns.count + 1
+    Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, new_count})
+    {:noreply, assign(socket, count: new_count)}
+  end
+
+  def handle_event("decrement", _params, socket) do
+    new_count = socket.assigns.count - 1
+    Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, new_count})
+    {:noreply, assign(socket, count: new_count)}
+  end
+
+  def handle_event("reset", _params, socket) do
+    Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, 0})
+    {:noreply, assign(socket, count: 0)}
+  end
+
+  # 다른 브라우저에서 방송(broadcast)이 오면 이 함수가 실행됨!
+  def handle_info({:count_updated, new_count}, socket) do
+    {:noreply, assign(socket, count: new_count)}
+  end
+end
+```
+
+#### 코드 핵심 포인트 3가지
+
+**① 구독 (Subscribe) — 방송 채널 청취 시작**
+```elixir
+if connected?(socket) do
+  Phoenix.PubSub.subscribe(PhoenixHello.PubSub, @topic)
+end
+# connected?(socket) → WebSocket이 실제로 연결됐을 때만 구독해요.
+# (처음 HTTP로 HTML 받을 때는 구독 안 함, WebSocket 연결 후에 구독)
+```
+
+**② 방송 (Broadcast) — 이벤트를 채널 전체에 전파**
+```elixir
+Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, new_count})
+#                         ↑                    ↑         ↑
+#                    PubSub 서버           채널 이름    전달할 데이터
+```
+
+**③ 수신 (handle_info) — 방송을 받았을 때 처리**
+```elixir
+def handle_info({:count_updated, new_count}, socket) do
+  {:noreply, assign(socket, count: new_count)}
+end
+# handle_event 는 클릭 등 브라우저 이벤트
+# handle_info  는 서버 내부 메시지 수신 (PubSub 방송 등)
+```
+
+#### ✅ 확인 방법
+1. `http://localhost:4000/counter` 를 **크롬**에서 열기
+2. 같은 URL을 **엣지** 또는 **다른 탭**에서도 열기
+3. 크롬에서 버튼 클릭 → 엣지 화면도 **동시에 바뀌는 것** 확인!
+
+> 🎉 이게 바로 Phoenix가 채팅앱, 실시간 대시보드, 협업 툴 만들기에 강한 이유예요!
+> Discord 같은 서비스도 이 방식으로 실시간 업데이트를 구현해요.
 
 ---
 
 ## 4단계: 폼(Form)으로 사용자 입력 받기
+
 
 ### 개념
 LiveView 폼을 사용하면 사용자가 입력한 값을 실시간으로 처리할 수 있어요.
