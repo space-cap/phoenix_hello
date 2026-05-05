@@ -26,11 +26,6 @@ defmodule PhoenixHelloWeb.Router do
     get "/greet/:name", HelloController, :greet
     live "/counter", CounterLive
     live "/messages", MessageLive
-
-    live "/todos", TodoLive.Index, :index
-    live "/todos/new", TodoLive.Form, :new
-    live "/todos/:id", TodoLive.Show, :show
-    live "/todos/:id/edit", TodoLive.Form, :edit
   end
 
   # Other scopes may use custom stacks.
@@ -70,6 +65,11 @@ defmodule PhoenixHelloWeb.Router do
     get "/users/settings", UserSettingsController, :edit
     put "/users/settings", UserSettingsController, :update
     get "/users/settings/confirm-email/:token", UserSettingsController, :confirm_email
+
+    live "/todos", TodoLive.Index, :index
+    live "/todos/new", TodoLive.Form, :new
+    live "/todos/:id", TodoLive.Show, :show
+    live "/todos/:id/edit", TodoLive.Form, :edit
   end
 
   scope "/", PhoenixHelloWeb do
