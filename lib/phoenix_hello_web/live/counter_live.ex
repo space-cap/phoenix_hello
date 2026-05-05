@@ -1,7 +1,15 @@
 defmodule PhoenixHelloWeb.CounterLive do
   use PhoenixHelloWeb, :live_view
 
+  # PubSub 토픽 이름 (방송 채널 이름 같은 것)
+  @topic "counter:global"
+
   def mount(_params, _session, socket) do
+    # 이 LiveView가 시작될 때 "counter:global" 채널을 구독(청취 시작)
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(PhoenixHello.PubSub, @topic)
+    end
+
     {:ok, assign(socket, count: 0)}
   end
 
@@ -9,7 +17,7 @@ defmodule PhoenixHelloWeb.CounterLive do
     ~H"""
     <Layouts.app flash={@flash}>
       <div class="text-center py-20">
-        <h1 class="text-4xl font-bold mb-8">실시간 카운터</h1>
+        <h1 class="text-4xl font-bold mb-8">실시간 카운터 (전체 공유)</h1>
         
         <p class="text-8xl font-mono mb-10">{@count}</p>
         
@@ -38,15 +46,26 @@ defmodule PhoenixHelloWeb.CounterLive do
     """
   end
 
+  # 버튼 클릭 시 → 새 count 계산 → 전체 채널에 방송!
   def handle_event("increment", _params, socket) do
-    {:noreply, update(socket, :count, &(&1 + 1))}
+    new_count = socket.assigns.count + 1
+    Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, new_count})
+    {:noreply, assign(socket, count: new_count)}
   end
 
   def handle_event("decrement", _params, socket) do
-    {:noreply, update(socket, :count, &(&1 - 1))}
+    new_count = socket.assigns.count - 1
+    Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, new_count})
+    {:noreply, assign(socket, count: new_count)}
   end
 
   def handle_event("reset", _params, socket) do
+    Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, 0})
     {:noreply, assign(socket, count: 0)}
+  end
+
+  # 다른 브라우저에서 방송(broadcast)이 오면 이 함수가 실행됨!
+  def handle_info({:count_updated, new_count}, socket) do
+    {:noreply, assign(socket, count: new_count)}
   end
 end
