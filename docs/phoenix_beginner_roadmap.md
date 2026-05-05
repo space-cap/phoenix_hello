@@ -679,29 +679,232 @@ live "/messages", MessageLive
 ## 5단계: Ecto로 DB 연동 (TODO 앱!) 🏆
 
 ### 개념
-지금까지는 서버 메모리에만 데이터를 저장했어요. 페이지를 새로고침하면 사라지죠.
-**Ecto**는 Elixir에서 데이터베이스(PostgreSQL)와 대화하는 도구예요.
 
-### 실습 순서
+지금까지 배운 것들의 문제점:
+- **3단계 카운터(Agent)**: 서버 재시작하면 값이 사라짐
+- **4단계 메시지 보드**: 서버 재시작하면 메시지가 모두 사라짐
 
-#### (1) 스키마(Schema) 자동 생성
-터미널에서:
+**Ecto**는 Elixir에서 **데이터베이스(PostgreSQL)와 대화**하는 도구예요.
+DB에 저장하면 서버를 재시작해도 데이터가 남아있어요!
+
+```
+Agent (메모리)  →  서버 재시작하면 사라짐 💨
+DB (PostgreSQL) →  영구 저장! 서버 재시작해도 남아있음 💾
+```
+
+---
+
+### ❓ 이 명령어가 뭘 하는 건가요?
+
 ```bash
 mix phx.gen.live Todos Todo todos title:string done:boolean
 ```
-이 명령어 하나로 CRUD 기능이 모두 자동 생성돼요! 🎉
 
-#### (2) 마이그레이션 실행
+이 명령어를 **단어 하나하나 분해**해서 살펴볼게요:
+
+| 부분 | 의미 |
+|------|------|
+| `mix` | Elixir의 빌드/작업 도구 (Node의 npm과 비슷) |
+| `phx.gen.live` | "Phoenix의 LiveView CRUD 코드를 자동 생성해줘" |
+| `Todos` | **컨텍스트(Context)** 이름 — 관련 기능을 묶는 폴더 이름 |
+| `Todo` | **스키마(Schema)** 이름 — DB 테이블 1개를 나타내는 Elixir 구조체 |
+| `todos` | **테이블 이름** — PostgreSQL DB에 실제로 생성될 테이블 이름 |
+| `title:string` | `title` 컬럼, 타입은 문자열(VARCHAR) |
+| `done:boolean` | `done` 컬럼, 타입은 참/거짓(BOOLEAN) |
+
+> 💡 **컨텍스트(Context)란?**
+> 관련 기능을 한 폴더에 묶어두는 개념이에요.
+> 쇼핑몰이라면 `Accounts`(회원), `Products`(상품), `Orders`(주문) 같은 단위로 분리해요.
+> `Todos`는 "할 일 관련 기능 모음"이 되는 거예요.
+
+> 💡 **스키마(Schema) vs 테이블?**
+>
+> | | 스키마(Todo) | 테이블(todos) |
+> |--|-------------|---------------|
+> | 위치 | Elixir 코드 안 | PostgreSQL DB 안 |
+> | 역할 | DB 데이터를 Elixir 구조체로 표현 | 실제 데이터가 저장되는 곳 |
+> | 관계 | 테이블을 코드로 표현한 것 | 스키마가 참조하는 실제 저장소 |
+
+---
+
+### 생성된 파일 전체 목록
+
+이 명령어 한 번으로 **총 8개 파일**이 자동 생성됐어요!
+
+```
+phoenix_hello/
+├── lib/
+│   ├── phoenix_hello/
+│   │   ├── todos.ex                    ← ① 컨텍스트 (DB 쿼리 함수 모음)
+│   │   └── todos/
+│   │       └── todo.ex                 ← ② 스키마 (테이블 구조 정의)
+│   └── phoenix_hello_web/
+│       └── live/
+│           └── todo_live/
+│               ├── index.ex            ← ③ 목록 페이지 LiveView
+│               ├── show.ex             ← ④ 상세 페이지 LiveView
+│               └── form.ex             ← ⑤ 생성/수정 폼 LiveView
+├── priv/
+│   └── repo/
+│       └── migrations/
+│           └── 20260505081141_create_todos.exs  ← ⑥ DB 마이그레이션
+└── test/                               ← ⑦⑧ 테스트 파일들
+```
+
+---
+
+### 각 파일 상세 설명
+
+#### ① `lib/phoenix_hello/todos.ex` — 컨텍스트
+
+```elixir
+defmodule PhoenixHello.Todos do
+  def list_todos do       # 전체 목록 조회
+    Repo.all(Todo)
+  end
+
+  def get_todo!(id) do   # ID로 특정 항목 조회 (없으면 에러)
+    Repo.get!(Todo, id)
+  end
+
+  def create_todo(attrs) do  # 새 TODO 생성
+    %Todo{}
+    |> Todo.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def update_todo(todo, attrs) do  # TODO 수정
+    todo
+    |> Todo.changeset(attrs)
+    |> Repo.update()
+  end
+
+  def delete_todo(todo) do   # TODO 삭제
+    Repo.delete(todo)
+  end
+end
+```
+
+이 파일이 **DB와의 실제 대화**를 담당해요.
+LiveView 파일들이 직접 DB에 접근하지 않고, 무조건 이 파일을 통해 접근해요.
+
+```
+LiveView → Todos 컨텍스트 → Ecto (Repo) → PostgreSQL DB
+```
+
+#### ② `lib/phoenix_hello/todos/todo.ex` — 스키마
+
+```elixir
+defmodule PhoenixHello.Todos.Todo do
+  use Ecto.Schema
+
+  schema "todos" do        # "todos" 테이블과 연결
+    field :title, :string  # title 컬럼 (문자열)
+    field :done, :boolean, default: false  # done 컬럼 (기본값: false)
+
+    timestamps()           # inserted_at, updated_at 컬럼 자동 추가
+  end
+
+  def changeset(todo, attrs) do   # 유효성 검사
+    todo
+    |> cast(attrs, [:title, :done])         # title, done 필드 허용
+    |> validate_required([:title, :done])   # title, done 필수!
+  end
+end
+```
+
+스키마는 **DB 테이블의 Elixir 버전**이에요.
+`changeset`은 데이터를 저장하기 전에 유효성을 검사해요 (예: title이 비어있으면 저장 거부).
+
+#### ③④⑤ `lib/phoenix_hello_web/live/todo_live/` — LiveView 3총사
+
+| 파일 | URL | 하는 일 |
+|------|-----|---------|
+| `index.ex` | `/todos` | TODO 전체 목록 표시 + 삭제 |
+| `show.ex` | `/todos/:id` | TODO 하나의 상세 정보 |
+| `form.ex` | `/todos/new`, `/todos/:id/edit` | 생성 폼 & 수정 폼 |
+
+#### ⑥ `priv/repo/migrations/20260505081141_create_todos.exs` — 마이그레이션
+
+```elixir
+defmodule PhoenixHello.Repo.Migrations.CreateTodos do
+  use Ecto.Migration
+
+  def change do
+    create table(:todos) do   # "todos" 테이블 생성
+      add :title, :string     # title 컬럼 추가
+      add :done, :boolean, default: false, null: false  # done 컬럼 추가
+
+      timestamps()            # inserted_at, updated_at 컬럼 자동 추가
+    end
+  end
+end
+```
+
+이 파일은 **"DB에 todos 테이블을 만들어라"는 명령서**예요.
+파일명 앞의 숫자(`20260505081141`)는 **생성 시각**이에요. 순서를 보장하기 위해 씁니다.
+
+> 💡 마이그레이션 파일은 **절대 직접 수정하거나 삭제하지 마세요!**
+> DB 변경 이력이 담겨 있어서, 팀원들이 같은 DB 구조를 유지할 수 있어요.
+
+---
+
+### 실습 순서
+
+#### (1) 명령어 실행 (이미 완료!)
+
+```bash
+mix phx.gen.live Todos Todo todos title:string done:boolean
+```
+
+#### (2) 마이그레이션 실행 — DB에 테이블 실제 생성
+
 ```bash
 mix ecto.migrate
 ```
 
-#### (3) router.ex에 안내된 경로 추가
-명령 실행 후 터미널 출력에 나오는 안내를 따라 `router.ex`에 추가하면 완성!
+이 명령을 실행하면:
+```
+PostgreSQL DB에 다음이 생성됨:
 
-### ✅ 결과
-- `http://localhost:4000/todos` 에서 TODO 목록 보기
-- TODO 추가 / 수정 / 삭제 / 완료 처리가 DB와 연동!
+CREATE TABLE todos (
+    id BIGSERIAL PRIMARY KEY,      ← ID (자동 증가)
+    title VARCHAR,                 ← 제목
+    done BOOLEAN DEFAULT false,    ← 완료 여부
+    inserted_at TIMESTAMP,         ← 생성 시각
+    updated_at TIMESTAMP           ← 수정 시각
+);
+```
+
+#### (3) router.ex에 경로 추가
+
+명령어 실행 시 터미널에서 이런 안내가 출력돼요:
+```
+Add the live routes to your browser scope in lib/phoenix_hello_web/router.ex:
+
+    live "/todos", TodoLive.Index, :index
+    live "/todos/new", TodoLive.Form, :new
+    live "/todos/:id", TodoLive.Show, :show
+    live "/todos/:id/edit", TodoLive.Form, :edit
+```
+
+이미 `router.ex`에 추가되어 있을 거예요. 없으면 추가하세요!
+
+---
+
+### ✅ 결과 — 완성된 CRUD 기능
+
+| URL | 기능 |
+|-----|------|
+| `/todos` | TODO 전체 목록 보기 + 삭제 버튼 |
+| `/todos/new` | 새 TODO 만들기 (폼) |
+| `/todos/:id` | TODO 상세 보기 |
+| `/todos/:id/edit` | TODO 수정하기 (폼) |
+
+> 🎉 명령어 단 한 줄이 이 모든 기능을 만들어줬어요!
+> 물론 실제 프로젝트에서는 자동 생성 코드를 이해하고 수정하는 능력이 필요해요.
+
+
 
 ---
 
