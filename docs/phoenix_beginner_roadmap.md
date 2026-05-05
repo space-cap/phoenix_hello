@@ -482,6 +482,130 @@ end
 
 ---
 
+### 🔧 심화2: 새 브라우저가 접속해도 현재 값 유지하기 (Agent)
+
+#### 문제 발견! 🤔
+
+PubSub을 적용했지만, 한 가지 문제가 남아있어요.
+크롬에서 카운터를 5로 올린 뒤, **새 브라우저(엣지)로 처음 접속**하면 숫자가 0으로 시작해요.
+
+```
+크롬:  count = 5  (버튼 클릭해서 올림)
+엣지:  count = 0  (새로 접속 → 처음부터 시작 😢)
+```
+
+**왜 이런 일이 생기나요?**
+현재 코드의 `mount`를 보면:
+```elixir
+{:ok, assign(socket, count: 0)}  # 항상 0으로 시작!
+```
+새 브라우저가 접속할 때마다 무조건 0으로 초기화하기 때문이에요.
+
+PubSub은 "방송을 실시간으로 전달"하지만, **방송 이전에 접속한 사람은 이전 값을 알 수 없어요.**
+마치 라디오 방송을 중간부터 켰을 때, 앞에서 무슨 말을 했는지 모르는 것처럼요.
+
+#### 해결책: Agent로 현재 값 기억시키기
+
+**Agent**는 서버 메모리에 값을 계속 보관해두는 "메모장"이에요.
+
+```
+Agent (서버 메모장)
+├── 크롬에서 +1 누름 → 5 저장
+├── 엣지 새로 접속 → "현재 값이 뭐야?" → 5 응답
+└── 파폭에서 접속 → "현재 값이 뭐야?" → 5 응답
+```
+
+#### 새 파일: `lib/phoenix_hello/counter_agent.ex`
+
+```elixir
+defmodule PhoenixHello.CounterAgent do
+  use Agent
+
+  def start_link(_opts) do
+    # 서버 시작 시 0으로 초기화된 Agent 프로세스를 시작
+    Agent.start_link(fn -> 0 end, name: __MODULE__)
+  end
+
+  # 현재 값 읽기
+  def get do
+    Agent.get(__MODULE__, & &1)
+  end
+
+  # 새 값 저장
+  def set(value) do
+    Agent.update(__MODULE__, fn _ -> value end)
+  end
+end
+```
+
+#### `lib/phoenix_hello/application.ex` 수정
+
+Agent를 앱 시작 시 자동으로 켜지도록 등록해요:
+
+```elixir
+children = [
+  PhoenixHello.Repo,
+  {Phoenix.PubSub, name: PhoenixHello.PubSub},
+  PhoenixHello.CounterAgent,   # ← 이 줄 추가!
+  PhoenixHelloWeb.Endpoint
+]
+```
+
+#### `counter_live.ex` 수정
+
+**mount**: 접속 시 Agent에서 현재 값 읽기
+```elixir
+def mount(_params, _session, socket) do
+  if connected?(socket) do
+    Phoenix.PubSub.subscribe(PhoenixHello.PubSub, @topic)
+  end
+
+  # 0 대신 → Agent에서 현재 공유 값을 읽어옴!
+  current_count = PhoenixHello.CounterAgent.get()
+  {:ok, assign(socket, count: current_count)}
+end
+```
+
+**handle_event**: 값 변경 시 Agent에도 저장
+```elixir
+def handle_event("increment", _params, socket) do
+  new_count = socket.assigns.count + 1
+  PhoenixHello.CounterAgent.set(new_count)  # ← Agent에 저장!
+  Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, new_count})
+  {:noreply, assign(socket, count: new_count)}
+end
+```
+
+#### 전체 흐름 (완성판)
+
+```
+[처음 접속]
+새 브라우저 접속
+    ↓
+mount() 실행
+    ↓
+CounterAgent.get() → 현재 값(예: 5) 읽기
+    ↓
+화면에 5 표시 ✅
+
+[버튼 클릭]
++1 클릭
+    ↓
+new_count = 6
+    ↓
+CounterAgent.set(6)    → Agent 메모장에 6 저장
+PubSub.broadcast(...)  → 모든 브라우저에 6 전파
+    ↓
+모든 브라우저 화면이 6으로 업데이트 ✅
+```
+
+> ⚠️ **주의**: Agent는 서버 메모리에 저장해요. 서버를 재시작하면 값이 0으로 초기화돼요.
+> 재시작 후에도 값을 유지하려면 **5단계의 Ecto(DB)**를 사용해야 해요!
+
+---
+
+
+
 ## 4단계: 폼(Form)으로 사용자 입력 받기
 
 

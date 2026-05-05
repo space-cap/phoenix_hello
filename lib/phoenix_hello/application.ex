@@ -12,6 +12,7 @@ defmodule PhoenixHello.Application do
       PhoenixHello.Repo,
       {DNSCluster, query: Application.get_env(:phoenix_hello, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: PhoenixHello.PubSub},
+      PhoenixHello.CounterAgent,
       # Start a worker by calling: PhoenixHello.Worker.start_link(arg)
       # {PhoenixHello.Worker, arg},
       # Start to serve requests, typically the last entry

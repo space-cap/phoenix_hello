@@ -10,7 +10,9 @@ defmodule PhoenixHelloWeb.CounterLive do
       Phoenix.PubSub.subscribe(PhoenixHello.PubSub, @topic)
     end
 
-    {:ok, assign(socket, count: 0)}
+    # 처음 접속할 때 현재 공유 카운터 값을 읽어옴 (0이 아닌 실제 현재 값!)
+    current_count = PhoenixHello.CounterAgent.get()
+    {:ok, assign(socket, count: current_count)}
   end
 
   def render(assigns) do
@@ -46,20 +48,23 @@ defmodule PhoenixHelloWeb.CounterLive do
     """
   end
 
-  # 버튼 클릭 시 → 새 count 계산 → 전체 채널에 방송!
+  # 버튼 클릭 시 → 새 count 계산 → Agent에 저장 → 전체 채널에 방송!
   def handle_event("increment", _params, socket) do
     new_count = socket.assigns.count + 1
+    PhoenixHello.CounterAgent.set(new_count)  # 공유 저장소에 저장
     Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, new_count})
     {:noreply, assign(socket, count: new_count)}
   end
 
   def handle_event("decrement", _params, socket) do
     new_count = socket.assigns.count - 1
+    PhoenixHello.CounterAgent.set(new_count)  # 공유 저장소에 저장
     Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, new_count})
     {:noreply, assign(socket, count: new_count)}
   end
 
   def handle_event("reset", _params, socket) do
+    PhoenixHello.CounterAgent.set(0)          # 공유 저장소에 저장
     Phoenix.PubSub.broadcast(PhoenixHello.PubSub, @topic, {:count_updated, 0})
     {:noreply, assign(socket, count: 0)}
   end
