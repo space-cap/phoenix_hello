@@ -21,6 +21,12 @@ defmodule PhoenixHello.Todos do
     Repo.all(Todo)
   end
 
+  def list_todos_for_user(user_id) do
+    Todo
+    |> where([t], t.user_id == ^user_id)
+    |> Repo.all()
+  end
+
   @doc """
   Gets a single todo.
 

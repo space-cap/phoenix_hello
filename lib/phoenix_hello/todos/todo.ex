@@ -5,6 +5,7 @@ defmodule PhoenixHello.Todos.Todo do
   schema "todos" do
     field :title, :string
     field :done, :boolean, default: false
+    belongs_to :user, PhoenixHello.Accounts.User
 
     timestamps(type: :utc_datetime)
   end
@@ -12,7 +13,7 @@ defmodule PhoenixHello.Todos.Todo do
   @doc false
   def changeset(todo, attrs) do
     todo
-    |> cast(attrs, [:title, :done])
+    |> cast(attrs, [:title, :done, :user_id])
     |> validate_required([:title, :done])
   end
 end

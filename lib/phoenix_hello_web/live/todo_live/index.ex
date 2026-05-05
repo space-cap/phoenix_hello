@@ -44,10 +44,9 @@ defmodule PhoenixHelloWeb.TodoLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok,
-     socket
-     |> assign(:page_title, "Listing Todos")
-     |> stream(:todos, list_todos())}
+    # 로그인한 유저의 ID로 TODO 목록 가져오기
+    user_id = socket.assigns.current_user.id
+    {:ok, stream(socket, :todos, PhoenixHello.Todos.list_todos_for_user(user_id))}
   end
 
   @impl true
