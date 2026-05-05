@@ -65,11 +65,13 @@ defmodule PhoenixHelloWeb.Router do
     get "/users/settings", UserSettingsController, :edit
     put "/users/settings", UserSettingsController, :update
     get "/users/settings/confirm-email/:token", UserSettingsController, :confirm_email
-
-    live "/todos", TodoLive.Index, :index
-    live "/todos/new", TodoLive.Form, :new
-    live "/todos/:id", TodoLive.Show, :show
-    live "/todos/:id/edit", TodoLive.Form, :edit
+    live_session :require_authenticated_user,
+      on_mount: [{PhoenixHelloWeb.UserAuth, :ensure_authenticated}] do
+      live "/todos", TodoLive.Index, :index
+      live "/todos/new", TodoLive.Form, :new
+      live "/todos/:id", TodoLive.Show, :show
+      live "/todos/:id/edit", TodoLive.Form, :edit
+    end
   end
 
   scope "/", PhoenixHelloWeb do
