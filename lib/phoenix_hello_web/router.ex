@@ -23,6 +23,11 @@ defmodule PhoenixHelloWeb.Router do
     get "/greet/:name", HelloController, :greet
     live "/counter", CounterLive
     live "/messages", MessageLive
+
+    live "/todos", TodoLive.Index, :index
+    live "/todos/new", TodoLive.Form, :new
+    live "/todos/:id", TodoLive.Show, :show
+    live "/todos/:id/edit", TodoLive.Form, :edit
   end
 
   # Other scopes may use custom stacks.
