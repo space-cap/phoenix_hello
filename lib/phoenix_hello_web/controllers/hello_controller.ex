@@ -4,4 +4,8 @@ defmodule PhoenixHelloWeb.HelloController do
   def index(conn, _params) do
     render(conn, :index)
   end
+
+  def greet(conn, %{"name" => name}) do
+    render(conn, :greet, name: name)
+  end
 end
