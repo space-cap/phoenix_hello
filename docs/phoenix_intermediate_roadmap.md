@@ -64,82 +64,122 @@ end
 
 ---
 
-## 2단계: Ecto 심화 — 테이블 간 관계 🔗
+## 2단계: Ecto 심화 — 회원별 TODO 만들기 (1:N 관계) 🔗
 
-### 초보 단계의 한계
-지금 TODO는 누가 만든 건지 모르고, 모두가 같은 목록을 공유해요.
+### 개념: 초보 단계의 한계
+지금 우리가 만든 TODO 앱은 **누가 작성한 건지** 알 수 없고, 모든 사람이 똑같은 할 일 목록을 공유합니다.
+1단계에서 로그인(User) 기능을 만들었으니, 이제 **"이 TODO는 누가 만들었나(user_id)"** 정보를 DB에 추가해서 **각자의 TODO**만 보이게 연결해볼 거예요. 이것이 관계형 DB의 1:N (One-to-Many) 관계입니다.
 
-### 1:N 관계 (One to Many)
+---
 
-"한 명의 User는 여러 개의 Todo를 가질 수 있다"
+### 실습 순서: 직접 따라 해보세요!
 
-```elixir
-# lib/phoenix_hello/todos/todo.ex
-schema "todos" do
-  field :title, :string
-  field :done, :boolean, default: false
-  belongs_to :user, PhoenixHello.Accounts.User  # ← User와 연결!
+#### (1) DB 마이그레이션 — `todos` 테이블에 `user_id` 추가하기
 
-  timestamps()
-end
-```
-
-```elixir
-# lib/phoenix_hello/accounts/user.ex
-schema "users" do
-  field :email, :string
-  has_many :todos, PhoenixHello.Todos.Todo  # ← Todo들을 소유
-end
-```
-
-### 마이그레이션 — 외래키(Foreign Key) 추가
-
+터미널을 열고 다음 명령어를 입력하세요:
 ```bash
 mix ecto.gen.migration add_user_id_to_todos
 ```
+`priv/repo/migrations/` 폴더에 새 파일(`숫자_add_user_id_to_todos.exs`)이 생깁니다. 이 파일을 열어서 아래처럼 수정하세요:
 
 ```elixir
-def change do
-  alter table(:todos) do
-    add :user_id, references(:users, on_delete: :delete_all)
-    #              ↑                   ↑
-    #   users 테이블 참조    user 삭제 시 todos도 함께 삭제
+defmodule PhoenixHello.Repo.Migrations.AddUserIdToTodos do
+  use Ecto.Migration
+
+  def change do
+    alter table(:todos) do
+      # users 테이블을 참조하는 user_id 컬럼 추가
+      # on_delete: :delete_all 은 유저가 탈퇴하면 그 유저의 todo도 다 지우라는 뜻이에요!
+      add :user_id, references(:users, on_delete: :delete_all)
+    end
+
+    # user_id로 검색을 빨리 하기 위해 인덱스(색인) 추가
+    create index(:todos, [:user_id])
+  end
+end
+```
+저장 후, 마이그레이션을 실행해서 실제 DB에 반영합니다:
+```bash
+mix ecto.migrate
+```
+
+#### (2) 스키마(Schema) 연결하기
+
+이제 Elixir 코드에 "User와 Todo가 연결되어 있다"고 알려줘야 해요.
+
+**`lib/phoenix_hello/todos/todo.ex` 수정:**
+```elixir
+defmodule PhoenixHello.Todos.Todo do
+  use Ecto.Schema
+  import Ecto.Changeset
+
+  schema "todos" do
+    field :title, :string
+    field :done, :boolean, default: false
+    # 이 줄을 추가하세요! (Todo는 User에 속한다)
+    belongs_to :user, PhoenixHello.Accounts.User
+
+    timestamps(type: :utc_datetime)
+  end
+
+  def changeset(todo, attrs) do
+    todo
+    |> cast(attrs, [:title, :done, :user_id]) # :user_id 추가!
+    |> validate_required([:title, :done])
   end
 end
 ```
 
-### Ecto 쿼리 심화
-
+**`lib/phoenix_hello/accounts/user.ex` 수정:**
 ```elixir
-# 특정 사용자의 TODO만 조회
-def list_todos_for_user(user_id) do
-  Todo
-  |> where([t], t.user_id == ^user_id)   # WHERE user_id = ?
-  |> order_by([t], desc: t.inserted_at)  # ORDER BY inserted_at DESC
-  |> Repo.all()
-end
+  schema "users" do
+    field :email, :string
+    field :password, :string, virtual: true, redact: true
+    field :hashed_password, :string, redact: true
+    field :confirmed_at, :naive_datetime
+    
+    # 이 줄을 추가하세요! (User는 여러 개의 Todo를 가진다)
+    has_many :todos, PhoenixHello.Todos.Todo
 
-# 연관 데이터 함께 조회 (JOIN)
-def list_todos_with_user do
-  Todo
-  |> preload(:user)   # user 정보를 함께 불러옴 (N+1 문제 방지!)
-  |> Repo.all()
-end
+    timestamps(type: :utc_datetime)
+  end
 ```
 
-### 트랜잭션 (Transaction)
+#### (3) 특정 사용자의 TODO만 가져오도록 수정 (Context)
 
-"A와 B 작업이 모두 성공해야만 저장, 하나라도 실패하면 전체 취소"
+`lib/phoenix_hello/todos.ex` 파일을 엽니다. 기존에는 `Repo.all(Todo)`로 모든 TODO를 가져왔죠? 이제 사용자 ID를 받아서 필터링하는 함수를 만듭니다.
 
 ```elixir
-def transfer_money(from_account, to_account, amount) do
-  Ecto.Multi.new()
-  |> Ecto.Multi.update(:debit, Account.changeset(from_account, %{balance: from_account.balance - amount}))
-  |> Ecto.Multi.update(:credit, Account.changeset(to_account, %{balance: to_account.balance + amount}))
-  |> Repo.transaction()
-  # 둘 다 성공하면 커밋, 하나라도 실패하면 롤백!
-end
+  # 파일 상단에 아래 import 추가
+  import Ecto.Query
+
+  # 기존 list_todos/0 아래에 새 함수 추가
+  def list_todos_for_user(user_id) do
+    Todo
+    |> where([t], t.user_id == ^user_id)
+    |> Repo.all()
+  end
 ```
+
+#### (4) LiveView에서 현재 로그인한 유저 연결하기
+
+`lib/phoenix_hello_web/live/todo_live/index.ex`를 열고, 기존 `Todos.list_todos()`를 방금 만든 함수로 교체합니다. 로그인 정보는 `@current_user`에 들어있습니다.
+
+```elixir
+  @impl true
+  def mount(_params, _session, socket) do
+    # 로그인한 유저의 ID로 TODO 목록 가져오기
+    user_id = socket.assigns.current_user.id
+    {:ok, stream(socket, :todos, PhoenixHello.Todos.list_todos_for_user(user_id))}
+  end
+```
+
+그리고 새 TODO를 생성할 때 누구의 것인지(`user_id`) 넣어줘야 합니다. `form.ex`나 해당 로직을 처리하는 곳에서 `attrs`에 `user_id: user.id`를 추가하면 됩니다.
+
+### ✅ 확인 방법
+1. 브라우저에서 `/users/register`로 가입 후 로그인
+2. `/todos`에 접속하여 할 일을 추가해보기
+3. 로그아웃 후 다른 계정으로 가입/로그인하면 **서로 다른 TODO 목록**이 보이는지 확인!
 
 ---
 
