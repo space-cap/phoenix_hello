@@ -3,9 +3,6 @@ defmodule PhoenixHelloWeb.TodoLive.Index do
 
   alias PhoenixHello.Todos
 
-  # 1. 여기에 추가합니다!
-  # 이 코드가 있어야 mount 실행 전에 socket.assigns.current_user가 채워집니다.
-  on_mount {PhoenixHelloWeb.UserAuth, :ensure_authenticated}
 
   @impl true
   def render(assigns) do
@@ -59,7 +56,5 @@ defmodule PhoenixHelloWeb.TodoLive.Index do
     {:noreply, stream_delete(socket, :todos, todo)}
   end
 
-  defp list_todos() do
-    Todos.list_todos()
-  end
+
 end
